@@ -87,7 +87,7 @@ app.post('/admin/login', (req, res) => {
   const auth = readAuth();
   if (bcrypt.compareSync(password, auth.passwordHash)) {
     req.session.admin = true;
-    res.redirect('/admin');
+    res.redirect('/admin/announce');
   } else {
     res.send(renderLogin('密碼錯誤，請再試一次。'));
   }
@@ -98,9 +98,13 @@ app.get('/admin/logout', (req, res) => {
   res.redirect('/admin/login');
 });
 
-app.get('/admin', requireLogin, (req, res) => {
+app.get('/admin', requireLogin, (req, res) => res.redirect('/admin/dashboard'));
+app.get('/admin/:section', requireLogin, (req, res) => {
   const data = readData();
-  res.send(renderAdmin(data, null));
+  const section = req.params.section;
+  const valid = ['dashboard','tours','site','contact','visa','announce','password'];
+  if (!valid.includes(section)) return res.redirect('/admin/dashboard');
+  res.send(renderAdmin(data, null, section));
 });
 
 // Update site settings
@@ -111,7 +115,7 @@ app.post('/admin/site', requireLogin, (req, res) => {
   data.site.subtagline = req.body.subtagline || data.site.subtagline;
   data.site.heroText   = req.body.heroText   || data.site.heroText;
   writeData(data);
-  res.redirect('/admin?saved=site');
+  res.redirect('/admin/site?saved=1');
 });
 
 // Update contact
@@ -119,7 +123,7 @@ app.post('/admin/contact', requireLogin, (req, res) => {
   const data = readData();
   data.contact = { ...data.contact, ...req.body };
   writeData(data);
-  res.redirect('/admin?saved=contact');
+  res.redirect('/admin/contact?saved=1');
 });
 
 // Add tour
@@ -145,7 +149,7 @@ app.post('/admin/tours/add', requireLogin, uploadTourFields, (req, res) => {
   };
   data.tours.push(newTour);
   writeData(data);
-  res.redirect('/admin?saved=tour');
+  res.redirect('/admin/tours?saved=1');
 });
 
 // Edit tour
@@ -170,7 +174,7 @@ app.post('/admin/tours/edit/:id', requireLogin, uploadTourFields, (req, res) => 
     if (files.scheduleFile) tour.scheduleFile = '/uploads/' + files.scheduleFile[0].filename;
   }
   writeData(data);
-  res.redirect('/admin?saved=tour');
+  res.redirect('/admin/tours?saved=1');
 });
 
 // Delete tour
@@ -178,7 +182,7 @@ app.post('/admin/tours/delete/:id', requireLogin, (req, res) => {
   const data = readData();
   data.tours = data.tours.filter(t => t.id !== req.params.id);
   writeData(data);
-  res.redirect('/admin?saved=tour');
+  res.redirect('/admin/tours?saved=1');
 });
 
 // Announcements
@@ -193,14 +197,14 @@ app.post('/admin/announcement', requireLogin, (req, res) => {
     data.announcements.push({ id: Date.now().toString(), text: req.body.text, active });
   }
   writeData(data);
-  res.redirect('/admin?saved=announcement');
+  res.redirect('/admin/announce?saved=1');
 });
 
 app.post('/admin/announcement/delete/:id', requireLogin, (req, res) => {
   const data = readData();
   data.announcements = (data.announcements || []).filter(a => a.id !== req.params.id);
   writeData(data);
-  res.redirect('/admin');
+  res.redirect('/admin/announce');
 });
 
 // Visa info
@@ -208,7 +212,7 @@ app.post('/admin/visa', requireLogin, (req, res) => {
   const data = readData();
   data.visa_info = req.body.visa_info;
   writeData(data);
-  res.redirect('/admin?saved=visa');
+  res.redirect('/admin/visa?saved=1');
 });
 
 // Change password
@@ -216,17 +220,17 @@ app.post('/admin/password', requireLogin, (req, res) => {
   const { current, newpass, confirm } = req.body;
   const auth = readAuth();
   if (!bcrypt.compareSync(current, auth.passwordHash)) {
-    return res.send(renderAdmin(readData(), '✗ 目前密碼錯誤'));
+    return res.send(renderAdmin(readData(), '✗ 目前密碼錯誤', 'password'));
   }
   if (newpass !== confirm) {
-    return res.send(renderAdmin(readData(), '✗ 新密碼不一致'));
+    return res.send(renderAdmin(readData(), '✗ 新密碼不一致', 'password'));
   }
   if (newpass.length < 6) {
-    return res.send(renderAdmin(readData(), '✗ 密碼長度應至少6字'));
+    return res.send(renderAdmin(readData(), '✗ 密碼長度應至少6字', 'password'));
   }
   auth.passwordHash = bcrypt.hashSync(newpass, 10);
   writeAuth(auth);
-  res.redirect('/admin?saved=password');
+  res.redirect('/admin/password?saved=1');
 });
 
 // ── START SERVER ──────────────────────────────────────────────────────────────
@@ -896,7 +900,8 @@ tr:last-child td{border-bottom:none}
 .schedule-hint{font-size:.75rem;color:#7a6e62;margin-top:.3rem;line-height:1.6;background:#fdf9f4;border:1px solid #e0d8cc;padding:.6rem .8rem;border-radius:3px}
 </style>`;
 
-function renderAdmin(data, errorMsg) {
+function renderAdmin(data, errorMsg, activeSection) {
+  activeSection = activeSection || 'dashboard';
   const tours = data.tours || [];
 
   const toursTableRows = tours.map(t => `
@@ -906,7 +911,7 @@ function renderAdmin(data, errorMsg) {
       <td>${esc(t.duration)}</td>
       <td>${t.featured ? '✅' : '—'}</td>
       <td>
-        <button class="ab ab-edit" onclick="openEditModal('${esc(t.id)}','${esc(t.name).replace(/'/g,"\\'")}','${esc(t.tag).replace(/'/g,"\\'")}','${esc(t.duration).replace(/'/g,"\\'")}','${esc(t.description).replace(/'/g,"\\'").replace(/\n/,'\\n')}','${esc(t.price).replace(/'/g,"\\'")}','${esc(t.departDate||'').replace(/'/g,"\\'")}',\`${(t.schedule||[]).length ? JSON.stringify(t.schedule).replace(/`/g,'\\`') : ''}\`,'${esc(t.flights||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}','${esc(t.includes||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}','${esc(t.excludes||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}','${esc(t.deposit||'').replace(/'/g,"\\'")}','${esc(t.scheduleFile||\'\')}',${t.featured})">✏️ 編輯</button>
+        <button class="ab ab-edit" onclick="openEditModal('${esc(t.id)}','${esc(t.name).replace(/'/g,"\\'")}','${esc(t.tag).replace(/'/g,"\\'")}','${esc(t.duration).replace(/'/g,"\\'")}','${esc(t.description).replace(/'/g,"\\'").replace(/\n/,'\\n')}','${esc(t.price).replace(/'/g,"\\'")}','${esc(t.departDate||'').replace(/'/g,"\\'")}',\`${(t.schedule||[]).length ? JSON.stringify(t.schedule).replace(/`/g,'\\`') : ''}\`,'${esc(t.flights||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}','${esc(t.includes||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}','${esc(t.excludes||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}','${esc(t.deposit||'').replace(/'/g,"\\'")}','${esc(t.scheduleFile||"")}',${t.featured})">✏️ 編輯</button>
         <form method="POST" action="/admin/tours/delete/${t.id}" style="display:inline" onsubmit="return confirm('確定要刪除？')">
           <button class="ab ab-del" type="submit">🗑 刪除</button>
         </form>
@@ -945,13 +950,13 @@ ${ADMIN_CSS}
 
 <div class="layout">
   <nav class="sidebar">
-    <button class="sidebar-item active" onclick="show('dashboard')">🏠 總覽</button>
-    <button class="sidebar-item" onclick="show('tours')">✈️ 旅遊行程</button>
-    <button class="sidebar-item" onclick="show('site')">⚙️ 網站設定</button>
-    <button class="sidebar-item" onclick="show('contact')">📞 聯絡資訊</button>
-    <button class="sidebar-item" onclick="show('visa')">🛂 簽證說明</button>
-    <button class="sidebar-item" onclick="show('announce')">📢 公告管理</button>
-    <button class="sidebar-item" onclick="show('password')">🔒 更改密碼</button>
+    <a href="/admin/dashboard" class="sidebar-item ${activeSection==='dashboard'?'active':''}">🏠 總覽</a>
+    <a href="/admin/tours" class="sidebar-item ${activeSection==='tours'?'active':''}">✈️ 旅遊行程</a>
+    <a href="/admin/site" class="sidebar-item ${activeSection==='site'?'active':''}">⚙️ 網站設定</a>
+    <a href="/admin/contact" class="sidebar-item ${activeSection==='contact'?'active':''}">📞 聯絡資訊</a>
+    <a href="/admin/visa" class="sidebar-item ${activeSection==='visa'?'active':''}">🛂 簽證說明</a>
+    <a href="/admin/announce" class="sidebar-item ${activeSection==='announce'?'active':''}">📢 公告管理</a>
+    <a href="/admin/password" class="sidebar-item ${activeSection==='password'?'active':''}">🔒 更改密碼</a>
   </nav>
 
   <main class="main">
@@ -959,7 +964,7 @@ ${ADMIN_CSS}
     <div id="toast" class="toast" style="display:none"></div>
 
     <!-- DASHBOARD -->
-    <div class="panel active" id="panel-dashboard">
+    <div class="panel ${activeSection==='dashboard'?'active':''}" id="panel-dashboard">
       <div class="welcome">
         <h2>歡迎回來，<span class="gold">喜程旅行社</span> 管理員 👋</h2>
         <p>這是您的管理後台。您可以在這裡更新旅遊行程（含每日行程表）、網站設定、聯絡資訊、簽證說明、公告。<br>所有更改立即在網站上生效，無需寫程式。</p>
@@ -988,7 +993,7 @@ ${ADMIN_CSS}
     </div>
 
     <!-- TOURS -->
-    <div class="panel" id="panel-tours">
+    <div class="panel ${activeSection==='tours'?'active':''}" id="panel-tours">
       <div class="card">
         <div class="card-header">
           <div class="card-title">✈️ 旅遊行程管理</div>
@@ -1004,7 +1009,7 @@ ${ADMIN_CSS}
     </div>
 
     <!-- SITE SETTINGS -->
-    <div class="panel" id="panel-site">
+    <div class="panel ${activeSection==='site'?'active':''}" id="panel-site">
       <div class="card">
         <div class="card-header"><div class="card-title">⚙️ 網站設定</div></div>
         <div class="card-body">
@@ -1020,7 +1025,7 @@ ${ADMIN_CSS}
     </div>
 
     <!-- CONTACT -->
-    <div class="panel" id="panel-contact">
+    <div class="panel ${activeSection==='contact'?'active':''}" id="panel-contact">
       <div class="card">
         <div class="card-header"><div class="card-title">📞 聯絡資訊</div></div>
         <div class="card-body">
@@ -1042,7 +1047,7 @@ ${ADMIN_CSS}
     </div>
 
     <!-- VISA -->
-    <div class="panel" id="panel-visa">
+    <div class="panel ${activeSection==='visa'?'active':''}" id="panel-visa">
       <div class="card">
         <div class="card-header"><div class="card-title">🛂 簽證說明文字</div></div>
         <div class="card-body">
@@ -1055,7 +1060,7 @@ ${ADMIN_CSS}
     </div>
 
     <!-- ANNOUNCE -->
-    <div class="panel" id="panel-announce">
+    <div class="panel ${activeSection==='announce'?'active':''}" id="panel-announce">
       <div class="card">
         <div class="card-header">
           <div class="card-title">📢 公告管理</div>
@@ -1071,7 +1076,7 @@ ${ADMIN_CSS}
     </div>
 
     <!-- PASSWORD -->
-    <div class="panel" id="panel-password">
+    <div class="panel ${activeSection==='password'?'active':''}" id="panel-password">
       <div class="card">
         <div class="card-header"><div class="card-title">🔒 更改密碼</div></div>
         <div class="card-body">
@@ -1195,11 +1200,11 @@ ${ADMIN_CSS}
 
 <script>
 // Panel navigation
-function show(id){
+function show(id,el){
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.sidebar-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('panel-'+id).classList.add('active');
-  event.currentTarget.classList.add('active');
+  if(el)el.classList.add('active');
 }
 
 // Check for saved query param
@@ -1217,7 +1222,7 @@ if(p.get('saved')){
     const btn=document.querySelector('[onclick="show(\\''+sec+'\\')"]');
     if(btn)btn.classList.add('active');
   }
-  history.replaceState(null,'','/admin');
+  history.replaceState(null,'',location.pathname);
 }
 
 // Convert schedule array to plain text for textarea
