@@ -4,7 +4,6 @@ const multer  = require('multer');
 const bcrypt  = require('bcryptjs');
 const fs      = require('fs');
 const path    = require('path');
-const nodemailer = require('nodemailer');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -12,7 +11,6 @@ const PORT = process.env.PORT || 3000;
 // ── File paths
 const DATA_FILE  = path.join(__dirname, 'data', 'content.json');
 const AUTH_FILE  = path.join(__dirname, 'data', 'auth.json');
-const MAIL_FILE  = path.join(__dirname, 'data', 'mail.json');
 const UPLOAD_DIR = path.join(__dirname, 'public', 'uploads');
 
 // ── Helpers
@@ -20,11 +18,6 @@ function readData()       { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')
 function writeData(data)  { fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8'); }
 function readAuth()       { return JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8')); }
 function writeAuth(data)  { fs.writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2), 'utf8'); }
-function readMail()       {
-  if (!fs.existsSync(MAIL_FILE)) return null;
-  return JSON.parse(fs.readFileSync(MAIL_FILE, 'utf8'));
-}
-function writeMail(data)  { fs.writeFileSync(MAIL_FILE, JSON.stringify(data, null, 2), 'utf8'); }
 function requireLogin(req, res, next) {
   if (req.session && req.session.admin) return next();
   res.redirect('/admin/login');
@@ -82,46 +75,7 @@ app.get('/trip/:id', (req, res) => {
   res.send(renderTripDetail(data, tour));
 });
 
-// ── CONTACT FORM
-app.post('/contact', async (req, res) => {
-  const { name, phone, trip, message } = req.body;
-  const data = readData();
-  const toEmail = data.contact.email;
-  const mailConfig = readMail();
 
-  if (!mailConfig || !mailConfig.user || !mailConfig.pass) {
-    return res.send(renderContactResult(data, false, '郵件伺服器尚未設定，請聯絡管理員。'));
-  }
-
-  try {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: mailConfig.user, pass: mailConfig.pass }
-    });
-
-    await transporter.sendMail({
-      from: `"喜程旅行社網站" <${mailConfig.user}>`,
-      to: toEmail,
-      subject: `【喜程旅行社】新詢問：${name} - ${trip}`,
-      html: `
-        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#f7f3ed;border-radius:8px">
-          <h2 style="color:#1a1410;border-bottom:2px solid #c8963e;padding-bottom:8px">新客戶詢問</h2>
-          <table style="width:100%;border-collapse:collapse;margin-top:16px">
-            <tr><td style="padding:8px;color:#7a6e62;width:100px">姓名</td><td style="padding:8px;font-weight:600">${esc(name)}</td></tr>
-            <tr style="background:#fff"><td style="padding:8px;color:#7a6e62">電話</td><td style="padding:8px">${esc(phone)}</td></tr>
-            <tr><td style="padding:8px;color:#7a6e62">感興趣行程</td><td style="padding:8px">${esc(trip)}</td></tr>
-            <tr style="background:#fff"><td style="padding:8px;color:#7a6e62;vertical-align:top">詢問內容</td><td style="padding:8px">${esc(message).replace(/\n/g,'<br>')}</td></tr>
-          </table>
-          <p style="margin-top:16px;font-size:12px;color:#a09080">此郵件由 seetriptravel.com 自動發送</p>
-        </div>`
-    });
-
-    res.send(renderContactResult(data, true, ''));
-  } catch (err) {
-    console.error('Email error:', err);
-    res.send(renderContactResult(data, false, '發送失敗，請稍後再試或直接致電我們。'));
-  }
-});
 
 // ── ADMIN ROUTES
 app.get('/admin/login', (req, res) => res.send(renderLogin('')));
@@ -147,7 +101,7 @@ app.get('/admin', requireLogin, (req, res) => res.redirect('/admin/dashboard'));
 app.get('/admin/:section', requireLogin, (req, res) => {
   const data = readData();
   const section = req.params.section;
-  const valid = ['dashboard','tours','site','contact','visa','announce','password','mail'];
+  const valid = ['dashboard','tours','site','contact','visa','announce','password'];
   if (!valid.includes(section)) return res.redirect('/admin/dashboard');
   res.send(renderAdmin(data, null, section));
 });
@@ -276,12 +230,6 @@ app.post('/admin/password', requireLogin, (req, res) => {
   auth.passwordHash = bcrypt.hashSync(newpass, 10);
   writeAuth(auth);
   res.redirect('/admin/password?saved=1');
-});
-
-// Save mail settings
-app.post('/admin/mail', requireLogin, (req, res) => {
-  writeMail({ user: req.body.user, pass: req.body.pass });
-  res.redirect('/admin/mail?saved=1');
 });
 
 // ── START SERVER
@@ -459,8 +407,6 @@ footer{padding:2.5rem 5%;display:flex;justify-content:space-between;align-items:
 .exc-list li::before{content:'✗';color:#c06060}
 .inquiry-box{background:var(--cream);border:1px solid var(--sand);border-radius:4px;padding:1.5rem;margin-top:1.5rem;text-align:center}
 .inquiry-box p{font-size:.88rem;color:var(--muted);margin-bottom:1rem}
-.alert-success{background:#e8f7e8;border:1px solid #a8d8a8;color:#2a6b2a;padding:1.2rem 1.5rem;border-radius:4px;font-size:.9rem;margin-bottom:1.5rem}
-.alert-error{background:#fce8e8;border:1px solid #d8a8a8;color:#6b2a2a;padding:1.2rem 1.5rem;border-radius:4px;font-size:.9rem;margin-bottom:1.5rem}
 @keyframes fadeUp{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
@@ -473,7 +419,7 @@ footer{padding:2.5rem 5%;display:flex;justify-content:space-between;align-items:
 // PUBLIC PAGE
 // ════════════════════════════════════════
 
-function renderPublic(data, contactMsg) {
+function renderPublic(data) {
   const tours = data.tours || [];
   const featured = tours.filter(t => t.featured).slice(0, 3);
   const announcement = (data.announcements || []).find(a => a.active);
@@ -502,10 +448,6 @@ function renderPublic(data, contactMsg) {
         <div class="tour-meta"><span class="tour-dur">✦ ${esc(t.duration)}</span><span class="tour-price">${esc(t.price)}</span></div>
       </div></a>`;
   }).join('');
-
-  const contactAlert = contactMsg
-    ? `<div class="${contactMsg.ok ? 'alert-success' : 'alert-error'}">${contactMsg.ok ? '✅ 感謝您的詢問！我們將盡快與您聯絡。' : '⚠️ ' + esc(contactMsg.err)}</div>`
-    : '';
 
   return `<!DOCTYPE html>
 <html lang="zh-TW">
@@ -580,20 +522,19 @@ ${announcement ? `<div class="announce">${esc(announcement.text)}</div>` : ''}
     <div class="section-label">聯絡我們</div>
     <h2 style="margin-bottom:1rem">隨時聯絡<br>您的旅遊夥伴</h2>
     <p style="font-family:'Noto Serif TC',serif;font-weight:300;font-size:.9rem;color:var(--muted);line-height:1.9;margin-bottom:1.5rem">無論計劃中還是臨時起意，我們的旅遊顧問隨時為您服務。</p>
-    ${contactAlert}
-    <form method="POST" action="/contact">
+    <form action="mailto:${esc(data.contact.email)}" method="get" enctype="text/plain">
       <div class="form-row">
-        <div class="fg"><label>姓名</label><input type="text" name="name" placeholder="您的姓名" required></div>
-        <div class="fg"><label>聯絡電話</label><input type="tel" name="phone" placeholder="0900-000-000"></div>
+        <div class="fg"><label>姓名</label><input type="text" name="姓名" placeholder="您的姓名"></div>
+        <div class="fg"><label>聯絡電話</label><input type="tel" name="電話" placeholder="0900-000-000"></div>
       </div>
       <div class="fg"><label>感興趣的行程</label>
-        <select name="trip">
+        <select name="行程">
           <option>請選擇行程</option>
           ${tours.map(t => `<option>${esc(t.name)}</option>`).join('')}
           <option>其他？請告訴我們</option>
         </select>
       </div>
-      <div class="fg"><label>詢問內容</label><textarea name="message" placeholder="請描述您的需求或問題…"></textarea></div>
+      <div class="fg"><label>詢問內容</label><textarea name="內容" placeholder="請描述您的需求或問題…"></textarea></div>
       <button type="submit" class="btn btn-primary">發送詢問</button>
     </form>
   </div>
@@ -623,11 +564,6 @@ const obs=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersect
 document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
 </script>
 </body></html>`;
-}
-
-// Contact result page (after form submit)
-function renderContactResult(data, ok, err) {
-  return renderPublic(data, { ok, err });
 }
 
 // ════════════════════════════════════════
@@ -813,13 +749,11 @@ tr:last-child td{border-bottom:none}
 .welcome h2{font-size:1.3rem;margin-bottom:.4rem}.welcome h2 .gold{color:#c8963e}
 .welcome p{font-size:.88rem;color:rgba(247,243,237,.65);line-height:1.7}
 .schedule-hint{font-size:.75rem;color:#7a6e62;margin-top:.3rem;line-height:1.6;background:#fdf9f4;border:1px solid #e0d8cc;padding:.6rem .8rem;border-radius:3px}
-.mail-hint{font-size:.8rem;color:#7a6e62;line-height:1.7;background:#fef9ec;border:1px solid #e8d8a8;padding:.8rem 1rem;border-radius:3px;margin-bottom:1rem}
 </style>`;
 
 function renderAdmin(data, errorMsg, activeSection) {
   activeSection = activeSection || 'dashboard';
   const tours = data.tours || [];
-  const mailConfig = readMail();
   const saved = `<div class="toast">✅ 儲存成功！</div>`;
 
   const toursTableRows = tours.map(t => `
@@ -864,7 +798,6 @@ function renderAdmin(data, errorMsg, activeSection) {
     <a href="/admin/contact" class="sidebar-item ${activeSection==='contact'?'active':''}">📞 聯絡資訊</a>
     <a href="/admin/visa" class="sidebar-item ${activeSection==='visa'?'active':''}">🛂 簽證說明</a>
     <a href="/admin/announce" class="sidebar-item ${activeSection==='announce'?'active':''}">📢 公告管理</a>
-    <a href="/admin/mail" class="sidebar-item ${activeSection==='mail'?'active':''}">📧 郵件設定</a>
     <a href="/admin/password" class="sidebar-item ${activeSection==='password'?'active':''}">🔒 更改密碼</a>
   </nav>
   <main class="main">
@@ -887,11 +820,6 @@ function renderAdmin(data, errorMsg, activeSection) {
           <div style="font-size:2rem">📢</div>
           <div style="font-size:1.8rem;font-weight:700;color:#c8963e">${(data.announcements||[]).filter(a=>a.active).length}</div>
           <div style="font-size:.8rem;color:#7a6e62;margin-top:.2rem">活躍公告</div>
-        </div></div>
-        <div class="card" style="margin:0"><div class="card-body" style="text-align:center;padding:1.5rem">
-          <div style="font-size:2rem">📧</div>
-          <div style="font-size:1.8rem;font-weight:700;color:${mailConfig?'#2a5':'#c33'}">${mailConfig?'✓':'✗'}</div>
-          <div style="font-size:.8rem;color:#7a6e62;margin-top:.2rem">郵件設定</div>
         </div></div>
       </div>
     </div>
@@ -960,25 +888,6 @@ function renderAdmin(data, errorMsg, activeSection) {
         <div style="padding:0;overflow-x:auto">
           <table><thead><tr><th>公告內容</th><th>狀態</th><th>操作</th></tr></thead>
           <tbody>${annRows||'<tr><td colspan="3" style="text-align:center;color:#7a6e62;padding:2rem">尚無公告</td></tr>'}</tbody></table>
-        </div>
-      </div>
-    </div>
-
-    <!-- MAIL -->
-    <div style="display:${activeSection==='mail'?'block':'none'}">
-      <div class="card"><div class="card-header"><div class="card-title">📧 郵件設定（Gmail SMTP）</div></div>
-        <div class="card-body">
-          <div class="mail-hint">
-            📌 設定後，客戶填寫聯絡表單時，信件會自動發送到「聯絡資訊」中設定的 Email。<br>
-            📌 需要使用 Gmail 帳號，並啟用「應用程式密碼」（App Password）。<br>
-            📌 前往 Google 帳號 → 安全性 → 兩步驟驗證 → 應用程式密碼 → 產生16碼密碼。
-          </div>
-          <form method="POST" action="/admin/mail">
-            <div class="fg"><label>Gmail 帳號</label><input type="email" name="user" value="${esc(mailConfig?.user||'')}" placeholder="your@gmail.com"></div>
-            <div class="fg"><label>應用程式密碼（16碼）</label><input type="password" name="pass" value="${esc(mailConfig?.pass||'')}" placeholder="xxxx xxxx xxxx xxxx"></div>
-            <button type="submit" class="btn-save">儲存郵件設定</button>
-          </form>
-          ${mailConfig ? `<p style="margin-top:1rem;font-size:.85rem;color:#2a5">✅ 郵件設定已完成，目前使用：${esc(mailConfig.user)}</p>` : `<p style="margin-top:1rem;font-size:.85rem;color:#c33">⚠️ 尚未設定郵件，聯絡表單無法發送信件。</p>`}
         </div>
       </div>
     </div>
