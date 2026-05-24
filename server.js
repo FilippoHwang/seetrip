@@ -236,6 +236,7 @@ app.post('/admin/password', requireLogin, (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🌏 喜程旅行社 is running!`);
   console.log(`   Local:   http://localhost:${PORT}`);
+  console.log(`   Network: http://YOUR_PI_IP:${PORT}`);
   console.log(`   Admin:   http://localhost:${PORT}/admin`);
   console.log(`   Default password: seetrip2025\n`);
 });
