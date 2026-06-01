@@ -51,7 +51,7 @@ const ALLOWED_MIMES = [
 ];
 const upload = multer({
   storage,
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (ALLOWED_MIMES.includes(file.mimetype)) cb(null, true);
     else cb(new Error('只允許上傳圖片、PDF 或 Word 檔案'));
